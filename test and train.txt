@@ -1,0 +1,51 @@
+from osgeo import ogr
+import os
+import random
+
+def read_shapefile(path):
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    dataSource = driver.Open(path, 0)  # 0 means read-only, 1 means writeable
+    layer = dataSource.GetLayer()
+    features_by_category = {}
+    for feature in layer:
+        category = feature.GetField(2)  # Assuming the category is in the third column
+        if category not in features_by_category:
+            features_by_category[category] = []
+        features_by_category[category].append(feature.Clone())  # Clone feature to keep it in memory
+    return features_by_category
+
+def split_features(features_by_category, train_ratio=0.8):
+    train_features = []
+    test_features = []
+    for category, features in features_by_category.items():
+        random.shuffle(features)
+        split_index = int(len(features) * train_ratio)
+        train_features.extend(features[:split_index])
+        test_features.extend(features[split_index:])
+    return train_features, test_features
+
+def write_shapefile(features, path, template_path):
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    if os.path.exists(path):
+        driver.DeleteDataSource(path)
+    dataSource = driver.CreateDataSource(path)
+    template_ds = ogr.Open(template_path)
+    layer = template_ds.GetLayer()
+    new_layer = dataSource.CreateLayer(layer.GetName(), geom_type=layer.GetGeomType())
+    layer_defn = layer.GetLayerDefn()
+    for i in range(layer_defn.GetFieldCount()):
+        new_layer.CreateField(layer_defn.GetFieldDefn(i))
+    for feature in features:
+        new_layer.CreateFeature(feature)
+    dataSource = None
+
+# Change 'your_shapefile_path.shp' to the path of your Shapefile
+path_to_shapefile = 'your_shapefile_path.shp'
+features_by_category = read_shapefile(path_to_shapefile)
+train_features, test_features = split_features(features_by_category)
+# 假设你想要将文件保存到以下目录
+output_directory = '/path/to/your/desired/directory/'
+
+# 修改write_shapefile函数调用时的路径参数
+write_shapefile(train_features, output_directory + 'train_dataset.shp', path_to_shapefile)
+write_shapefile(test_features, output_directory + 'test_dataset.shp', path_to_shapefile)
